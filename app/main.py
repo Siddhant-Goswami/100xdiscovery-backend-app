@@ -2,6 +2,9 @@ from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from . import models, database, search, auth
 from typing import Optional
+import logging
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="100xEngineers Discovery Platform",
@@ -13,8 +16,33 @@ app = FastAPI(
     * User Authentication (Signup/Login)
     * Profile Management (CRUD operations)
     * Profile Search with AI-powered matching
+    
+    ## Authentication
+    The API uses JWT-based authentication. To access protected endpoints:
+    1. Sign up using `/api/auth/signup`
+    2. Login using `/api/auth/login` to get an access token
+    3. Include the token in the Authorization header: `Bearer <token>`
+    
+    ## Profile Management
+    Profiles can be managed through the following endpoints:
+    * Create: POST `/api/profiles` (authenticated)
+    * Read: GET `/api/profiles` or GET `/api/profiles/{id}` (public)
+    * Update: PUT `/api/profiles/{id}` (authenticated, own profile only)
+    * Delete: DELETE `/api/profiles/{id}` (authenticated, own profile only)
+    
+    ## Search
+    The platform includes AI-powered profile search:
+    * POST `/api/search` with a natural language query
+    * Returns profiles ranked by relevance
     """,
-    version="1.0.0"
+    version="1.0.0",
+    contact={
+        "name": "100xEngineers",
+        "url": "https://100xengineers.com",
+    },
+    license_info={
+        "name": "MIT",
+    }
 )
 
 # Configure CORS
@@ -88,22 +116,71 @@ async def get_profiles(current_user: Optional[str] = Depends(auth.get_current_us
 
 @app.get("/api/profiles/{profile_id}", response_model=models.UserProfile,
     summary="Get a specific profile",
-    description="Retrieve details of a specific profile by ID. Authentication is optional.")
+    description="Retrieve details of a specific profile by ID. Authentication is optional.",
+    responses={
+        404: {
+            "description": "Profile not found",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Profile not found"}
+                }
+            }
+        },
+        500: {
+            "description": "Internal server error",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Internal server error"}
+                }
+            }
+        }
+    })
 async def get_profile(
     profile_id: str,
     current_user: Optional[str] = Depends(auth.get_current_user)
 ):
     try:
+        logger.info(f"Fetching profile with ID: {profile_id}")
         profile = await database.get_profile(profile_id)
+        logger.info(f"Profile data: {profile}")
+        
         if not profile:
-            raise HTTPException(status_code=404, detail="Profile not found")
+            logger.warning(f"Profile not found with ID: {profile_id}")
+            raise HTTPException(
+                status_code=404, 
+                detail="Profile not found"
+            )
         return profile
+    except HTTPException as e:
+        raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error fetching profile {profile_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail="Internal server error"
+        )
 
 @app.put("/api/profiles/{profile_id}", response_model=models.UserProfile,
     summary="Update a profile",
-    description="Update an existing profile. Requires authentication. Users can only update their own profiles.")
+    description="Update an existing profile. Requires authentication. Users can only update their own profiles.",
+    responses={
+        404: {
+            "description": "Profile not found",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Profile not found"}
+                }
+            }
+        },
+        403: {
+            "description": "Not authorized",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Not authorized to update this profile"}
+                }
+            }
+        }
+    })
 async def update_profile(
     profile_id: str,
     profile: models.UserProfileCreate,
@@ -112,23 +189,57 @@ async def update_profile(
     try:
         existing_profile = await database.get_profile(profile_id)
         if not existing_profile:
-            raise HTTPException(status_code=404, detail="Profile not found")
+            raise HTTPException(
+                status_code=404, 
+                detail="Profile not found"
+            )
         
         if existing_profile.get("email"):
             if existing_profile["email"] != current_user:
-                raise HTTPException(status_code=403, detail="Not authorized to update this profile")
+                raise HTTPException(
+                    status_code=403, 
+                    detail="Not authorized to update this profile"
+                )
         
         profile_dict = profile.model_dump()
         updated_profile = await database.update_profile(profile_id, profile_dict)
+        if not updated_profile:
+            raise HTTPException(
+                status_code=404, 
+                detail="Profile not found or could not be updated"
+            )
         return updated_profile
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error updating profile {profile_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail="Internal server error"
+        )
 
 @app.delete("/api/profiles/{profile_id}",
+    response_model=models.DeleteResponse,
     summary="Delete a profile",
-    description="Delete an existing profile. Requires authentication. Users can only delete their own profiles.")
+    description="Delete an existing profile. Requires authentication. Users can only delete their own profiles.",
+    responses={
+        404: {
+            "description": "Profile not found",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Profile not found"}
+                }
+            }
+        },
+        403: {
+            "description": "Not authorized",
+            "content": {
+                "application/json": {
+                    "example": {"detail": "Not authorized to delete this profile"}
+                }
+            }
+        }
+    })
 async def delete_profile(
     profile_id: str,
     current_user: str = Depends(auth.get_current_user)
@@ -136,18 +247,33 @@ async def delete_profile(
     try:
         existing_profile = await database.get_profile(profile_id)
         if not existing_profile:
-            raise HTTPException(status_code=404, detail="Profile not found")
+            raise HTTPException(
+                status_code=404, 
+                detail="Profile not found"
+            )
         
         if existing_profile.get("email"):
             if existing_profile["email"] != current_user:
-                raise HTTPException(status_code=403, detail="Not authorized to delete this profile")
+                raise HTTPException(
+                    status_code=403, 
+                    detail="Not authorized to delete this profile"
+                )
         
-        deleted_profile = await database.delete_profile(profile_id)
-        return {"message": "Profile deleted successfully"}
+        deleted = await database.delete_profile(profile_id)
+        if not deleted:
+            raise HTTPException(
+                status_code=404, 
+                detail="Profile not found or could not be deleted"
+            )
+        return models.DeleteResponse(message="Profile deleted successfully")
     except HTTPException as e:
         raise e
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error deleting profile {profile_id}: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail="Internal server error"
+        )
 
 @app.post("/api/search",
     summary="Search profiles",

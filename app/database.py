@@ -2,6 +2,7 @@ import os
 import logging
 from supabase import create_client, Client
 from dotenv import load_dotenv
+from typing import Optional
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -30,13 +31,22 @@ async def get_all_profiles():
         logger.error(f"Error fetching profiles: {str(e)}")
         raise
 
-async def get_profile(profile_id: str):
+async def get_profile(profile_id: str) -> Optional[dict]:
+    """
+    Get a profile by ID.
+    Returns None if no profile is found.
+    """
     try:
         response = supabase.table("profiles").select("*").eq("id", profile_id).single().execute()
         return response.data
+    except postgrest.exceptions.APIError as e:
+        if "PGRST116" in str(e):  # No rows found
+            return None
+        logger.error(f"API Error fetching profile {profile_id}: {str(e)}")
+        raise e
     except Exception as e:
         logger.error(f"Error fetching profile {profile_id}: {str(e)}")
-        raise
+        raise e
 
 async def get_profile_by_email(email: str):
     try:

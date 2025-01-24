@@ -34,6 +34,9 @@ class AuthResponse(BaseModel):
 class UserProfileCreate(BaseModel):
     """
     Data required to create or update an engineer profile.
+    
+    This model is used for both POST /api/profiles and PUT /api/profiles/{id} endpoints.
+    When updating a profile, all fields must be provided (full update).
     """
     name: str = Field(..., description="Full name of the engineer")
     skills: List[str] = Field(..., description="List of technical skills and competencies")
@@ -51,6 +54,12 @@ class UserProfileCreate(BaseModel):
 class UserProfile(UserProfileCreate):
     """
     Complete engineer profile including system-managed fields.
+    
+    This model is returned by:
+    - GET /api/profiles
+    - GET /api/profiles/{id}
+    - POST /api/profiles
+    - PUT /api/profiles/{id}
     """
     id: str = Field(..., description="Unique identifier for the profile")
     email: Optional[str] = Field(None, description="Associated email address (optional for existing profiles)")
@@ -59,8 +68,20 @@ class UserProfile(UserProfileCreate):
     class Config:
         from_attributes = True
 
+class DeleteResponse(BaseModel):
+    """
+    Response returned after successfully deleting a profile.
+    """
+    message: str = Field(..., description="Success message confirming the profile was deleted")
+
 class SearchQuery(BaseModel):
     """
     Search query for finding relevant engineer profiles.
     """
-    query: str = Field(..., description="Natural language search query to find matching profiles") 
+    query: str = Field(..., description="Natural language search query to find matching profiles")
+
+class SearchResponse(BaseModel):
+    """
+    Response containing search results with relevance scores.
+    """
+    results: List[Dict[str, Any]] = Field(..., description="List of matching profiles with relevance scores") 
