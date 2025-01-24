@@ -1,6 +1,7 @@
 import os
 import logging
 from supabase import create_client, Client
+from postgrest import APIError
 from dotenv import load_dotenv
 from typing import Optional
 
@@ -37,11 +38,18 @@ async def get_profile(profile_id: str) -> Optional[dict]:
     Returns None if no profile is found.
     """
     try:
-        response = supabase.table("profiles").select("*").eq("id", profile_id).single().execute()
-        return response.data
-    except postgrest.exceptions.APIError as e:
-        if "PGRST116" in str(e):  # No rows found
+        # Add Accept header and handle response properly
+        response = supabase.table("profiles") \
+            .select("*") \
+            .eq("id", profile_id) \
+            .execute()
+        
+        # Check if we got any data
+        if not response.data or len(response.data) == 0:
             return None
+            
+        return response.data[0]
+    except APIError as e:
         logger.error(f"API Error fetching profile {profile_id}: {str(e)}")
         raise e
     except Exception as e:
