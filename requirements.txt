@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+pydantic
+python-dotenv
+supabase
+groq
+python-jose
+passlib
+python-multipart 
