@@ -3,7 +3,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import models, database, search, auth
 from typing import Optional
 import logging
-import os
 
 logger = logging.getLogger(__name__)
 
@@ -62,13 +61,7 @@ async def signup(auth_data: models.AuthRequest):
     try:
         response = database.supabase.auth.sign_up({
             "email": auth_data.email,
-            "password": auth_data.password,
-            "options": {
-                "email_redirect_to": os.getenv("REDIRECT_URL"),
-                "data": {
-                    "email": auth_data.email
-                }
-            }
+            "password": auth_data.password
         })
         return models.AuthResponse.from_supabase_response(
             message="Signup successful. Please check your email for verification.",
