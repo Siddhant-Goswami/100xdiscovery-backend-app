@@ -38,12 +38,51 @@ async def get_profile(profile_id: str):
         logger.error(f"Error fetching profile {profile_id}: {str(e)}")
         raise
 
+async def get_profile_by_email(email: str):
+    try:
+        response = supabase.table("profiles").select("*").eq("email", email).execute()
+        return response.data[0] if response.data else None
+    except Exception as e:
+        logger.error(f"Error fetching profile by email {email}: {str(e)}")
+        raise
+
 async def create_profile(profile_data: dict):
     try:
+        # Check if user already has a profile
+        if "email" in profile_data:
+            existing_profile = await get_profile_by_email(profile_data["email"])
+            if existing_profile:
+                raise ValueError("User already has a profile")
+        
         response = supabase.table("profiles").insert(profile_data).execute()
         return response.data[0]
     except Exception as e:
         logger.error(f"Error creating profile: {str(e)}")
+        raise
+
+async def update_profile(profile_id: str, profile_data: dict):
+    try:
+        # Get existing profile to check if it has email
+        existing_profile = await get_profile(profile_id)
+        if not existing_profile:
+            raise ValueError("Profile not found")
+        
+        # Only update allowed fields
+        allowed_fields = ["name", "skills", "bio", "projects", "collaboration_interests", "portfolio_url"]
+        update_data = {k: v for k, v in profile_data.items() if k in allowed_fields}
+        
+        response = supabase.table("profiles").update(update_data).eq("id", profile_id).execute()
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error updating profile: {str(e)}")
+        raise
+
+async def delete_profile(profile_id: str):
+    try:
+        response = supabase.table("profiles").delete().eq("id", profile_id).execute()
+        return response.data[0]
+    except Exception as e:
+        logger.error(f"Error deleting profile: {str(e)}")
         raise
 
 async def search_profiles(query: str):

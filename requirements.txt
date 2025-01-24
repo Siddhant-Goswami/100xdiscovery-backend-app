@@ -6,4 +6,6 @@ supabase
 groq
 python-jose
 passlib
-python-multipart 
+python-multipart
+email-validator
+PyJWT 
